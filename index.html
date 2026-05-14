@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แดชบอร์ดบัญชีรายรับ-รายจ่าย</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Prompt', 'sans-serif'] },
+                    colors: {
+                        primary: '#3b82f6', success: '#10b981', danger: '#ef4444',
+                        background: '#f8fafc', surface: '#ffffff'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Prompt', sans-serif; background-color: #f8fafc; }
+        .glass-card {
+            background: white; border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .loader {
+            border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%;
+            width: 40px; height: 40px; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-3">
+                    <div class="bg-primary/10 p-2 rounded-lg text-primary">
+                        <i class="fa-solid fa-wallet text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold leading-tight">ระบบบัญชีรายรับ-รายจ่าย</h1>
+                        <p class="text-xs text-slate-500 font-medium">ตั้งแต่ พฤษภาคม 2554 - ปัจจุบัน</p>
+                    </div>
+                </div>
+                <button onclick="fetchData()" class="flex items-center gap-2 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-full transition-colors font-medium shadow-sm">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span id="datetime-btn" class="hidden sm:inline">กำลังโหลดเวลา...</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full relative">
+        
+        <div id="loading" class="absolute inset-0 bg-background/80 backdrop-blur-sm z-40 flex flex-col items-center justify-center rounded-2xl">
+            <div class="loader mb-4"></div>
+            <p class="text-slate-600 font-medium animate-pulse">กำลังโหลดข้อมูลจาก Google Sheets...</p>
+        </div>
+
+        <div id="error-message" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-r-lg shadow-sm" role="alert">
+            <p class="font-bold">เกิดข้อผิดพลาด</p>
+            <p id="error-text">ไม่สามารถเชื่อมต่อข้อมูลได้ กรุณาตรวจสอบ URL หรือการตั้งค่าแชร์ไฟล์</p>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="glass-card p-6 flex flex-col bg-gradient-to-br from-emerald-50 to-white">
+                <p class="text-sm font-medium text-slate-500 mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-trend-up text-emerald-500 text-lg"></i> รวมรายรับ
+                </p>
+                <div class="flex items-baseline gap-2">
+                    <h2 id="total-income" class="text-3xl font-bold text-success">0</h2>
+                    <span class="text-base font-medium text-slate-500">บาท</span>
+                </div>
+                <p id="income-percent" class="text-sm text-emerald-600 mt-1 font-medium">คิดเป็น 0.00%</p>
+            </div>
+            
+            <div class="glass-card p-6 flex flex-col bg-gradient-to-br from-rose-50 to-white">
+                <p class="text-sm font-medium text-slate-500 mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-trend-down text-rose-500 text-lg"></i> รวมรายจ่าย
+                </p>
+                <div class="flex items-baseline gap-2">
+                    <h2 id="total-expense" class="text-3xl font-bold text-danger">0</h2>
+                    <span class="text-base font-medium text-slate-500">บาท</span>
+                </div>
+                <p id="expense-percent" class="text-sm text-rose-600 mt-1 font-medium">คิดเป็น 0.00%</p>
+            </div>
+            
+            <div class="glass-card p-6 flex flex-col bg-gradient-to-br from-blue-50 to-white">
+                <p class="text-sm font-medium text-slate-500 mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-piggy-bank text-blue-500 text-lg"></i> ยอดคงเหลือ
+                </p>
+                <div class="flex items-baseline gap-2">
+                    <h2 id="total-balance" class="text-3xl font-bold text-slate-800">0</h2>
+                    <span class="text-base font-medium text-slate-500">บาท</span>
+                </div>
+                <p class="text-sm mt-1 invisible">-</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Charts Column -->
+            <div class="flex flex-col gap-6 lg:col-span-1">
+                <!-- กราฟรายรับ -->
+                <div class="glass-card p-6 flex flex-col">
+                    <div class="mb-4">
+                        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-bar text-emerald-500"></i> รายละเอียดรายรับ
+                        </h3>
+                        <p id="income-chart-subtitle" class="text-sm font-medium text-slate-500 mt-1">รวม 0 บาท</p>
+                    </div>
+                    <div class="relative w-full overflow-x-auto pb-2">
+                        <div class="min-w-[420px] min-h-[380px] h-full w-full">
+                            <canvas id="incomeBarChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- กราฟรายจ่าย -->
+                <div class="glass-card p-6 flex flex-col">
+                    <div class="mb-4">
+                        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-bar text-rose-500"></i> รายละเอียดรายจ่าย
+                        </h3>
+                        <p id="expense-chart-subtitle" class="text-sm font-medium text-slate-500 mt-1">รวม 0 บาท</p>
+                    </div>
+                    <div class="relative w-full overflow-x-auto pb-2">
+                        <div class="min-w-[420px] min-h-[380px] h-full w-full">
+                            <canvas id="expenseBarChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table Column -->
+            <div class="glass-card lg:col-span-2 flex flex-col overflow-hidden h-fit">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
+                    <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-list text-slate-400"></i> รายละเอียดรับ-จ่าย
+                    </h3>
+                    <span id="record-count" class="text-xs font-medium bg-slate-100 text-slate-600 px-3 py-1 rounded-full">0 รายการ</span>
+                </div>
+                <div class="overflow-x-auto max-h-[800px] relative">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="sticky top-0 z-20 shadow-sm">
+                            <tr>
+                                <th rowspan="2" class="px-4 py-3 text-center text-sm font-bold text-slate-700 bg-slate-100 uppercase sticky left-0 shadow-[1px_0_0_0_#e2e8f0] z-30 whitespace-nowrap align-middle border-b border-slate-200">เดือน</th>
+                                
+                                <th colspan="9" class="px-4 py-2 text-center text-sm font-bold text-emerald-700 bg-emerald-100 uppercase border-b border-emerald-200">รายรับ</th>
+                                <th rowspan="2" class="px-4 py-3 text-center text-sm font-bold text-emerald-800 bg-emerald-200 uppercase whitespace-nowrap align-middle border-b border-emerald-300">รวมรายรับ</th>
+                                
+                                <th colspan="9" class="px-4 py-2 text-center text-sm font-bold text-rose-700 bg-rose-100 uppercase border-b border-rose-200">รายจ่าย</th>
+                                <th rowspan="2" class="px-4 py-3 text-center text-sm font-bold text-rose-800 bg-rose-200 uppercase whitespace-nowrap align-middle border-b border-rose-300">รวมรายจ่าย</th>
+                                
+                                <th rowspan="2" class="px-4 py-3 text-center text-sm font-bold text-blue-800 bg-blue-200 uppercase whitespace-nowrap align-middle border-b border-blue-300">คงเหลือ</th>
+                            </tr>
+                            <tr>
+                                <!-- รายรับ -->
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-emerald-50 whitespace-nowrap border-b border-slate-200">เงินเดือน</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-emerald-50 whitespace-nowrap border-b border-slate-200">เงิน ปจต.</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-emerald-50 whitespace-nowrap border-b border-slate-200">ใบประกอบ</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-emerald-50 whitespace-nowrap border-b border-slate-200">เบี้ยเลี้ยง</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-emerald-50 whitespace-nowrap border-b border-slate-200">พ.ต.ส.</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-emerald-50 whitespace-nowrap border-b border-slate-200">ออกหน่วยฯ</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-emerald-50 whitespace-nowrap border-b border-slate-200">OT</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-emerald-50 whitespace-nowrap border-b border-slate-200">ค่าครองชีพ</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-emerald-50 whitespace-nowrap border-b border-slate-200">ทุน ก.พ.</th>
+                                
+                                <!-- รายจ่าย -->
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-rose-50 whitespace-nowrap border-b border-slate-200">ส่งให้แม่</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-rose-50 whitespace-nowrap border-b border-slate-200">น้องฟ้า</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-rose-50 whitespace-nowrap border-b border-slate-200">กบข.</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-rose-50 whitespace-nowrap border-b border-slate-200">ซื้อคอมฯ</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-rose-50 whitespace-nowrap border-b border-slate-200">ผ่อนบ้าน</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-rose-50 whitespace-nowrap border-b border-slate-200">ผ่อนรถ</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-rose-50 whitespace-nowrap border-b border-slate-200">AXA</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-rose-50 whitespace-nowrap border-b border-slate-200">ประกันรถ</th>
+                                <th class="px-4 py-2 text-center text-xs font-semibold text-slate-600 bg-rose-50 whitespace-nowrap border-b border-slate-200">ภงด. 91</th>
+                            </tr>
+                            <tr id="table-totals-row">
+                                <!-- แถวรวมยอดจะถูกแทรกที่นี่ผ่าน Javascript -->
+                            </tr>
+                        </thead>
+                        <tbody id="table-body" class="bg-white divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+                <div id="table-empty" class="hidden p-8 text-center text-slate-500">
+                    <i class="fa-solid fa-folder-open text-4xl mb-3 text-slate-300"></i>
+                    <p>ยังไม่มีข้อมูลในระบบ</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-white border-t border-slate-200 py-6 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center text-sm text-slate-500">
+            &copy; 2026 บัญชีรายรับ-รายจ่าย นายสมผล สังขะวรรณ
+        </div>
+    </footer>
+
+    <script>
+        const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRrmVHkoCZRWZTEhESzIqqvaeSEQXWA88wJ4qp-bbW90I7_w8Gx92NxJdAyAffftgnNOmHMQ41sF316/pub?gid=1556339133&single=true&output=csv";
+        let incomeBarChartInstance = null;
+        let expenseBarChartInstance = null;
+
+        Chart.register(ChartDataLabels);
+
+        const formatNumberNoDecimal = (amount) => {
+            return new Intl.NumberFormat('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
+        };
+        const parseAmount = (val) => {
+            if (!val) return 0;
+            const parsed = parseFloat(String(val).replace(/,/g, '').replace(/\s/g, ''));
+            return isNaN(parsed) ? 0 : parsed;
+        };
+
+        function updateDateTime() {
+            const now = new Date();
+            const months = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+            const day = now.getDate();
+            const month = months[now.getMonth()];
+            const year = now.getFullYear() + 543;
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('datetime-btn').textContent = `วันที่ ${day} ${month} ${year} ${hours}.${minutes} น.`;
+        }
+        setInterval(updateDateTime, 60000);
+
+        function showLoading(show) { document.getElementById('loading').style.display = show ? 'flex' : 'none'; }
+        function showError(message) {
+            document.getElementById('error-text').textContent = message;
+            document.getElementById('error-message').classList.remove('hidden');
+        }
+        function hideError() { document.getElementById('error-message').classList.add('hidden'); }
+
+        function fetchData() {
+            showLoading(true);
+            hideError();
+            Papa.parse(SHEET_CSV_URL, {
+                download: true,
+                header: false,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    showLoading(false);
+                    try {
+                        if(results.data && results.data.length >= 3) {
+                            processData(results.data);
+                        } else {
+                            throw new Error("โครงสร้างข้อมูลใน Sheet ไม่ถูกต้อง");
+                        }
+                    } catch (error) {
+                        showError("เกิดข้อผิดพลาดในการประมวลผลข้อมูล: " + error.message);
+                    }
+                },
+                error: function(err) {
+                    showLoading(false);
+                    showError("ไม่สามารถดึงข้อมูลจาก Google Sheets ได้");
+                }
+            });
+        }
+
+        function processData(data) {
+            const row3 = data[2];
+
+            const totalIncome = parseAmount(row3[12]);
+            const totalExpense = parseAmount(row3[22]);
+            const totalBalance = parseAmount(row3[23]);
+
+            const grandTotals = {
+                incomes: [
+                    parseAmount(row3[3]), parseAmount(row3[4]), parseAmount(row3[5]),
+                    parseAmount(row3[6]), parseAmount(row3[7]), parseAmount(row3[8]),
+                    parseAmount(row3[9]), parseAmount(row3[10]), parseAmount(row3[11])
+                ],
+                totalIncome: totalIncome,
+                expenses: [
+                    parseAmount(row3[13]), parseAmount(row3[14]), parseAmount(row3[15]),
+                    parseAmount(row3[16]), parseAmount(row3[17]), parseAmount(row3[18]),
+                    parseAmount(row3[19]), parseAmount(row3[20]), parseAmount(row3[21])
+                ],
+                totalExpense: totalExpense,
+                balance: totalBalance
+            };
+
+            const incomeLabels = ["เงินเดือน", "เงิน ปจต.", "ใบประกอบ", "เบี้ยเลี้ยง", "พ.ต.ส.", "ออกหน่วยฯ", "OT", "ค่าครองชีพ", "ทุน ก.พ."];
+            const incomeDetails = incomeLabels.map((label, idx) => parseAmount(row3[3 + idx]));
+
+            const expenseLabels = ["ส่งให้แม่", "น้องฟ้า", "กบข.", "ซื้อคอมฯ", "ผ่อนบ้าน", "ผ่อนรถ", "AXA", "ประกันรถ", "ภงด. 91"];
+            const expenseDetails = expenseLabels.map((label, idx) => parseAmount(row3[13 + idx]));
+
+            let formattedRows = [];
+            
+            for(let i = 3; i < data.length; i++) {
+                const row = data[i];
+                if (!row || row.length === 0) continue;
+                
+                const yearText = String(row[1] || '').trim();
+                const monthText = String(row[2] || '').trim();
+                const monthVal = monthText && yearText ? `${monthText} ${yearText}` : monthText || yearText;
+                
+                if (!monthVal) continue;
+                
+                const currentTotalIncome = parseAmount(row[12]);
+                const currentTotalExpense = parseAmount(row[22]);
+
+                if (currentTotalIncome === 0 && currentTotalExpense === 0) continue;
+                
+                formattedRows.push({
+                    month: monthVal,
+                    incomes: [
+                        parseAmount(row[3]), parseAmount(row[4]), parseAmount(row[5]),
+                        parseAmount(row[6]), parseAmount(row[7]), parseAmount(row[8]),
+                        parseAmount(row[9]), parseAmount(row[10]), parseAmount(row[11])
+                    ],
+                    totalIncome: currentTotalIncome,
+                    expenses: [
+                        parseAmount(row[13]), parseAmount(row[14]), parseAmount(row[15]),
+                        parseAmount(row[16]), parseAmount(row[17]), parseAmount(row[18]),
+                        parseAmount(row[19]), parseAmount(row[20]), parseAmount(row[21])
+                    ],
+                    totalExpense: currentTotalExpense,
+                    balance: parseAmount(row[23])
+                });
+            }
+
+            formattedRows.reverse();
+            updateUI(totalIncome, totalExpense, totalBalance, formattedRows, incomeDetails, incomeLabels, expenseDetails, expenseLabels, grandTotals);
+        }
+
+        function updateUI(income, expense, balance, rows, incDetails, incLabels, expDetails, expLabels, grandTotals) {
+            document.getElementById('total-income').textContent = formatNumberNoDecimal(income);
+            document.getElementById('total-expense').textContent = formatNumberNoDecimal(expense);
+            
+            const totalSum = income + expense;
+            let incPct = 0; let expPct = 0;
+            if (totalSum > 0) {
+                incPct = (income / totalSum) * 100;
+                expPct = (expense / totalSum) * 100;
+            }
+            document.getElementById('income-percent').textContent = `คิดเป็น ${incPct.toFixed(2)}%`;
+            document.getElementById('expense-percent').textContent = `คิดเป็น ${expPct.toFixed(2)}%`;
+
+            const balElement = document.getElementById('total-balance');
+            balElement.textContent = formatNumberNoDecimal(balance);
+            if (balance < 0) {
+                balElement.classList.remove('text-slate-800'); balElement.classList.add('text-danger');
+            } else {
+                balElement.classList.add('text-slate-800'); balElement.classList.remove('text-danger');
+            }
+
+            document.getElementById('income-chart-subtitle').textContent = `รวม ${formatNumberNoDecimal(income)} บาท`;
+            document.getElementById('expense-chart-subtitle').textContent = `รวม ${formatNumberNoDecimal(expense)} บาท`;
+            document.getElementById('record-count').textContent = rows.length + " รายการ";
+
+            updateBarChart('incomeBarChart', incLabels, incDetails, '#10b981', incomeBarChartInstance, (instance) => incomeBarChartInstance = instance);
+            updateBarChart('expenseBarChart', expLabels, expDetails, '#ef4444', expenseBarChartInstance, (instance) => expenseBarChartInstance = instance);
+
+            const totalsRow = document.getElementById('table-totals-row');
+            let totalsHtml = `<td class="px-4 py-3 text-center whitespace-nowrap text-sm font-bold text-amber-900 sticky left-0 bg-amber-100 shadow-[1px_0_0_0_#fcd34d] z-30 border-b-2 border-amber-200">ยอดรวมทั้งหมด</td>`;
+            
+            grandTotals.incomes.forEach(val => {
+                totalsHtml += `<td class="px-4 py-3 text-center whitespace-nowrap text-sm font-bold text-emerald-700 bg-amber-50 border-b-2 border-amber-200">${formatNumberNoDecimal(val)}</td>`;
+            });
+            totalsHtml += `<td class="px-4 py-3 text-center whitespace-nowrap text-sm font-bold text-emerald-800 bg-emerald-100 border-b-2 border-emerald-300">${formatNumberNoDecimal(grandTotals.totalIncome)}</td>`;
+
+            grandTotals.expenses.forEach(val => {
+                totalsHtml += `<td class="px-4 py-3 text-center whitespace-nowrap text-sm font-bold text-rose-700 bg-amber-50 border-b-2 border-amber-200">${formatNumberNoDecimal(val)}</td>`;
+            });
+            totalsHtml += `<td class="px-4 py-3 text-center whitespace-nowrap text-sm font-bold text-rose-800 bg-rose-100 border-b-2 border-rose-300">${formatNumberNoDecimal(grandTotals.totalExpense)}</td>`;
+
+            const balColorClass = grandTotals.balance < 0 ? 'text-danger' : 'text-blue-800';
+            totalsHtml += `<td class="px-4 py-3 text-center whitespace-nowrap text-sm font-bold ${balColorClass} bg-blue-100 border-b-2 border-blue-300">${formatNumberNoDecimal(grandTotals.balance)}</td>`;
+            
+            totalsRow.innerHTML = totalsHtml;
+
+            const tbody = document.getElementById('table-body');
+            const emptyState = document.getElementById('table-empty');
+            tbody.innerHTML = '';
+
+            if (rows.length === 0) {
+                emptyState.classList.remove('hidden');
+                document.querySelector('table').classList.add('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                document.querySelector('table').classList.remove('hidden');
+
+                rows.forEach((row, index) => {
+                    const tr = document.createElement('tr');
+                    const rowBg = index % 2 === 0 ? "bg-white" : "bg-slate-50";
+                    tr.className = `hover:bg-slate-100 transition-colors duration-150 group ${rowBg}`;
+                    
+                    let html = `<td class="px-4 py-3 text-center whitespace-nowrap text-sm font-medium text-slate-800 sticky left-0 ${rowBg} group-hover:bg-slate-100 transition-colors shadow-[1px_0_0_0_#e2e8f0] z-10">${row.month}</td>`;
+
+                    row.incomes.forEach(val => {
+                        html += `<td class="px-4 py-3 text-center whitespace-nowrap text-sm text-slate-600">${val === 0 ? '-' : formatNumberNoDecimal(val)}</td>`;
+                    });
+                    
+                    html += `<td class="px-4 py-3 text-center whitespace-nowrap text-sm font-bold text-emerald-600 bg-emerald-50/80">${formatNumberNoDecimal(row.totalIncome)}</td>`;
+
+                    row.expenses.forEach(val => {
+                        html += `<td class="px-4 py-3 text-center whitespace-nowrap text-sm text-slate-600">${val === 0 ? '-' : formatNumberNoDecimal(val)}</td>`;
+                    });
+
+                    html += `<td class="px-4 py-3 text-center whitespace-nowrap text-sm font-bold text-rose-600 bg-rose-50/80">${formatNumberNoDecimal(row.totalExpense)}</td>`;
+
+                    const balColor = row.balance < 0 ? 'text-danger' : 'text-blue-600';
+                    html += `<td class="px-4 py-3 text-center whitespace-nowrap text-sm font-bold ${balColor} bg-blue-50/80">${formatNumberNoDecimal(row.balance)}</td>`;
+
+                    tr.innerHTML = html;
+                    tbody.appendChild(tr);
+                });
+            }
+        }
+
+        function updateBarChart(canvasId, labels, data, color, chartInstance, setChartInstance) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            if (chartInstance) { chartInstance.destroy(); }
+
+            const newChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data, backgroundColor: color, borderRadius: 4, barPercentage: 0.7
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: {
+                        padding: { right: 90 }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: { label: (context) => formatNumberNoDecimal(context.raw) + ' บาท' },
+                            titleFont: { family: "'Prompt', sans-serif" }, bodyFont: { family: "'Prompt', sans-serif" }
+                        },
+                        datalabels: {
+                            anchor: 'end', align: 'end',
+                            color: '#1e293b', font: { family: "'Prompt', sans-serif", weight: 'bold', size: 12 },
+                            formatter: (value) => value > 0 ? formatNumberNoDecimal(value) : ''
+                        }
+                    },
+                    scales: {
+                        x: { display: false, grid: { display: false } },
+                        y: {
+                            grid: { display: false },
+                            ticks: { 
+                                font: { family: "'Prompt', sans-serif", size: 13 }, 
+                                color: '#475569',
+                                autoSkip: false
+                            }
+                        }
+                    }
+                }
+            });
+            setChartInstance(newChart);
+        }
+
+        window.onload = () => {
+            updateDateTime();
+            fetchData();
+        };
+    </script>
+</body>
+</html>
